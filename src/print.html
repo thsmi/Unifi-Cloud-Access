@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Voucher</title>
+  <style>
+    body {
+      background-color: white;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    div.page {
+      margin-top: 5cm;
+    }
+
+    #qrcode {
+      text-align: center;
+    }
+
+    #qrcode>svg {
+      height: 7cm;
+    }
+
+    #details {
+      text-align: center;
+      font-size: 15pt;
+    }
+
+    @media print {
+      .pagebreak {
+        page-break-before: always;
+      }
+    }
+  </style>
+
+</head>
+
+<body>
+  <template id="template">
+    <div class="page">
+      <div id="qrcode">
+      </div>
+      <div id="details">
+        <div>
+          SSID: <span class="voucher-ssid"></span>
+        </div>
+        <div>
+          Password: <span class="voucher-password"></span>
+        </div>
+        <div>
+          Voucher: <span class="voucher-code"></span>
+        </div>
+        <br />
+        <div>
+          Valid for <span class="voucher-duration"></span>
+        </div>
+        <br />
+        <br />
+        <div class="voucher-note"></div>
+      </div>
+    </div>
+  </template>
+
+  <div id="content"></div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+
+    const vouchers = JSON.parse(params.get("vouchers"));
+    const content = document.getElementById("content");
+
+    for (const voucher of vouchers) {
+
+      if (content.childElementCount > 0) {
+        const pagepreak = document.createElement("div");
+        pagepreak.classList.add("pagebreak");
+        content.appendChild(pagepreak);
+      }
+
+      const elm = document.getElementById("template").content.cloneNode(true);
+
+      console.log(elm);
+      console.log(elm.querySelector(".voucher-code"));
+
+      if (voucher.ssid)
+        elm.querySelector(".voucher-ssid").textContent = voucher.ssid;
+
+      if (voucher.password)
+        elm.querySelector(".voucher-password").textContent = voucher.password;
+
+      if (voucher.code)
+        elm.querySelector(".voucher-code").textContent = voucher.code;
+
+      if (voucher.duration)
+        elm.querySelector(".voucher-duration").textContent = voucher.duration;
+
+      if (voucher.note)
+        elm.querySelector(".voucher-note").textContent = voucher.note;
+
+      document.getElementById("content").appendChild(elm);
+    }    
+  </script>
+</body>
+
+</html>

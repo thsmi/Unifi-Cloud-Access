@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Remote Voucher Management</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-KK94CHFLLe+nY2dmCWGMq91rCGa5gtU4mk92HdvYe+M/SXH301p5ILy+dN9+nJOZ" crossorigin="anonymous">
+</head>
+
+<body>
+
+  <!-- progress dialog -->
+  <div class="modal modal-lg fade" id="unifi-progress" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-body">
+          <div class="modal-body text-center">
+            <div class="progress" role="progressbar"  aria-valuenow="75" aria-valuemin="0" aria-valuemax="100">
+              <div id="unifi-progress-status" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+            </div>
+            <div id="unifi-progress-text"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Dialog -->
+  <div class="modal fade" id="unifi-login-dialog" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h1 class="modal-title fs-5">Login</h1>
+        </div>
+        <div id="unifi-login-credentials">
+          <div class="modal-body">
+            <div class="mb-3 row">
+              <label for="unifi-login-credentials-user" class="col-sm-2 col-form-label">Username</label>
+              <div class="col-sm-10">
+                <input type="text" class="form-control" id="unifi-login-credentials-user">
+              </div>
+            </div>
+            <div class="mb-3 row">
+              <label for="unifi-login-credentials-password" class="col-sm-2 col-form-label">Password</label>
+              <div class="col-sm-10">
+                <input type="password" class="form-control" id="unifi-login-credentials-password">
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" id="unifi-login-credentials-next">
+              Login
+            </button>
+          </div>
+        </div>
+        <div id="unifi-login-device" class="d-none">
+          <div class="modal-body">
+            <div>Please select the device</div>
+            <template id="unifi-login-device-template">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="unifi-login-device" id="flexRadioDefault1">
+                <label class="form-check-label" for="flexRadioDefault1">
+                  Default radio
+                </label>
+              </div>  
+            </template>
+            
+            <div id="unifi-login-devices">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" id="unifi-login-device-next">
+              next
+            </button>
+          </div>
+        </div>        
+        <div id="unifi-loading" class="d-none">
+          <div class="modal-body text-center">
+            <div class="spinner-border" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <div>
+              Loading
+            </div>            
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <template id="unifi-template-voucher">
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div class="ms-2 me-auto">
+        <div class="m-b1">
+          <span class="unifi-voucher-code fw-bold">XXXX-XXXX-XXXX-XXXX</span>
+          <span class="unifi-voucher-name">Name></span>           
+          <span class="unifi-voucher-expired d-none badge bg-danger">Expired</span>
+          <span class="unifi-voucher-active d-none badge bg-success">Active</span>
+        </div>
+        <div class="d-none">
+          Id <span class="unifi-voucher-id"></span>
+        </div>
+        <div>          
+          <span class="unifi-voucher-expires d-none">
+            Expires on <span class="unifi-voucher-expires-date"></span>
+            / <span class="unifi-voucher-devices"></span> Devices
+          </span>
+          <span class="unifi-voucher-duration d-none">
+            Valid for <span class="unifi-voucher-duration-date"></span>            
+          </span>
+          <span class="unifi-voucher-multiuse d-none"> (Multiuse)</span>
+        </div>
+      </div>
+      <div>
+        <button type="button" class="unifi-voucher-revoke btn btn-sm btn-outline-primary">Revoke</button>
+        <button type="button" class="unifi-voucher-print btn btn-sm btn-outline-primary">Print</button>
+      </div>            
+    </li>
+  </template>
+
+  <div class="container-lg">
+    <div class="card mt-4 mb-4">
+      <div class="card-header d-flex justify-content-between py-0">
+        <ul class="nav nav-tabs card-header-tabs my-0 pt-3" role="tablist">
+          <li class="nav-item">
+            <a class="nav-link active" data-bs-toggle="tab" role="tab" data-bs-target="#unifi-vouchers-pane">Vouchers</a>
+          </li>          
+          <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" role="tab" data-bs-target="#unifi-list-vouchers-pane">Create</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" role="tab" data-bs-target="#unifi-create-vouchers-pane">Create Batch</a>
+          </li>
+        </ul>
+        <div class="align-self-center">
+          <!-- <button id="unifi-refresh" type="button" class="btn btn-sm btn-outline-secondary me-1">Refresh</button> -->
+        </div>
+      </div>      
+      <div class="list-group list-group-flush tab-content border-top-0">
+
+        <!-- Create vouchers pane -->
+        <div  id="unifi-list-vouchers-pane" class="tab-pane fade m-4" role="tabpanel">
+          <div class="mb-3 row">
+            <label for="unifi-create-voucher-name" class="col-sm-2 col-form-label">Description</label>
+            <div class="col-sm-10">
+              <input class="form-control" id="unifi-create-voucher-name" placeholder="Description e.g. the User's name or details">
+            </div>
+          </div>
+
+          <div class="mb-3 row">
+            <label for="unifi-create-voucher-expires" class="col-sm-2 col-form-label">Expiration</label>
+            <div class="col-sm-3">
+              <input type="number" min="1" class="form-control text-end" id="unifi-create-voucher-expires" value="1">
+            </div>
+            <div class="col-sm-2">
+              <select id="unifi-create-voucher-expires-unit" class="form-select" aria-label="Default select example">
+                <option value="525600">years</option>
+                <option value="10080">weeks</option>
+                <option value="1440" selected>days</option>
+                <option value="60">hours</option>
+                <option value="1">minutes</option>
+              </select>
+            </div>
+          </div>
+          <div class="mb-3 row">
+            <label for="unifi-create-voucher-devices" class="col-sm-2 col-form-label">Device Limit</label>
+            <div class="col-sm-3">
+              <input type="number" min="0" class="form-control text-end" id="unifi-create-voucher-devices" value="0">
+            </div>            
+          </div>
+          
+          <div class="mb-3 row">
+            <label for="unifi-create-voucher-quantity" class="col-sm-2 col-form-label">Quantity</label>
+            <div class="col-sm-3">
+              <input type="number" min="1" class="form-control text-end" id="unifi-create-voucher-quantity" value="1">
+            </div>            
+          </div>          
+
+          <div class="text-end">
+            <button id="unifi-voucher-create" class="btn btn-primary">Create Voucher</button>
+          </div>
+        </div>
+        
+        <!-- Import Vouchers pane -->
+        <div id="unifi-create-vouchers-pane" class="tab-pane fade m-4" role="tabpanel">
+
+          <div id="unifi-create-vouchers-info"  class="alert alert-primary alert-dismissible fade show d-none" role="alert">
+            <strong>Nothing to import!</strong> Everything up to date.
+            <button type="button" class="btn-close" aria-label="Close" data-bs-toggle="collapse" data-bs-target="#unifi-create-vouchers-info"></button>
+          </div>
+          
+          <div class="mb-3 row">
+            <label for="unifi-import-file" class="col-sm-2 col-form-label">CSV File</label>
+            <div class="col-sm-10">
+              <input class="form-control" type="file" id="unifi-import-file">
+            </div>
+          </div>        
+
+          <div class="mb-3 row">
+            <label for="unifi-import-pattern" class="col-sm-2 col-form-label">Pattern</label>
+            <div class="col-sm-10">
+              <input class="form-control" id="unifi-import-pattern" value="Campingplatz 2023 - ${name} (${mailadresse})">
+            </div>
+          </div>
+
+          <div class="mb-3 row">
+            <label for="unifi-import-expires" class="col-sm-2 col-form-label">Expiration</label>
+            <div class="col-sm-3">
+              <input type="number" min="1" class="form-control text-end" id="unifi-import-expires" value="1">
+            </div>
+            <div class="col-sm-2">
+              <select id="unifi-import-expires-unit" class="form-select" aria-label="Default select example">
+                <option value="525600" selected>years</option>
+                <option value="10080">weeks</option>
+                <option value="1440">days</option>
+                <option value="60">hours</option>
+                <option value="1">minutes</option>
+              </select>
+            </div>           
+          </div>
+
+          <div class="mb-3 row">
+            <label for="unifi-import-devices" class="col-sm-2 col-form-label">Device Limit</label>
+            <div class="col-sm-3">
+              <input type="number" min="0" class="form-control text-end" id="unifi-import-devices" value="0">
+            </div>            
+          </div>
+          
+
+          <div class="text-end">
+            <button id="unifi-import-create" class="btn btn-primary" disabled>Import</button>
+          </div>
+
+          <div id="unifi-import-preview-plane" class="d-none">
+            <hr>
+            <ul id="unifi-imports" class="list-group list-group-flush">
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+              </li>                
+            </ul>
+          </div>
+
+        </div>
+
+        <!-- Vouchers pane-->
+        <div id="unifi-vouchers-pane" class="tab-pane fade show active" role="tabpanel">
+          <div class="p-4">
+            <div class="row">
+              <div class="col-sm-12">
+                <div class="input-group mb-3">
+                  <input id="unifi-vouchers-pattern" type="text" class="form-control" placeholder="Search pattern (Regular expression)" value=".*">
+                  <button class="btn btn-outline-secondary" type="button" id="unifi-vouchers-search">Search</button>
+                </div>                
+                <!--<input id ="unifi-vouchers-pattern" class="form-control" type="text" placeholder="Default input" aria-label="default input example" value="Campingplatz 2023 .*">-->
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-sm-2">
+                <div class="mb-3 form-check form-switch">
+                  <label class="form-check-label" for="unifi-vouchers-only-active">Active</label>
+                  <input class="form-check-input" type="checkbox" role="switch" id="unifi-vouchers-only-active"  checked>
+                </div>
+              </div>
+              <div class="col-sm-2">
+                <div class="mb-3 form-check form-switch">
+                  <label class="form-check-label" for="unifi-vouchers-only-expired">Expired</label>
+                  <input class="form-check-input" type="checkbox" role="switch" id="unifi-vouchers-only-expired"  checked>
+                </div>
+              </div>
+              <div class="col-sm-2">
+                <div class="mb-3 form-check form-switch">
+                  <label class="form-check-label" for="unifi-vouchers-only-unused">Unused</label>
+                  <input class="form-check-input" type="checkbox" role="switch" id="unifi-vouchers-only-unused"  checked>
+                </div>
+              </div>                        
+            </div>
+
+            <div class="text-end">              
+              <button id="unifi-vouchers-print" class="btn btn-primary" disabled>Print All</button>
+              <button id="unifi-vouchers-export" class="btn btn-primary" disabled>Export All</button>
+              <button id="unifi-vouchers-revoke" class="btn btn-primary" disabled>Revoke All</button>
+            </div>
+          </div>        
+
+          <div id="unifi-vouchers-results" class="d-none border-top">
+            <ul id="unifi-vouchers-items" class="list-group list-group-flush">
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+              </li>                
+            </ul>
+          </div>  
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-ENjdO4Dr2bkBIFxQpeoTz1HIcje39Wm4jDKdf19U8gI4ddQ3GYNS7NTKfAdVQSZe"
+    crossorigin="anonymous"></script>
+  <script src="./renderer.js" type="module" defer></script>
+</body>
+
+</html>
