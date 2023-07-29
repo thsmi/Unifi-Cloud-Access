@@ -119,7 +119,7 @@ class Vouchers {
    */
   async searchVouchers() {
 
-    const exp = new RegExp(document.getElementById("unifi-vouchers-pattern").value);
+    const exp = new RegExp(document.getElementById("unifi-vouchers-pattern").value, "i");
 
     const channel = await this.unifi.openApiChannel();
     let vouchers = [];
@@ -190,7 +190,7 @@ class Vouchers {
         this.revokeVoucher(voucher._id);
       });
       elm.querySelector(".unifi-voucher-print").addEventListener("click", () => {
-        this.print([{
+        window.electron.print([{
           "code": voucher.code,
           "duration": this.formatDuration(voucher.duration),
           "note" : voucher.note
@@ -219,7 +219,8 @@ class Vouchers {
   disableVoucherControls() {
     document.getElementById("unifi-vouchers-revoke").disabled = true;
     document.getElementById("unifi-vouchers-print").disabled = true;
-    document.getElementById("unifi-vouchers-export").disabled = true;
+    document.getElementById("unifi-vouchers-export-csv").disabled = true;
+    document.getElementById("unifi-vouchers-export-pdf").disabled = true;
   }
 
   /**
@@ -228,7 +229,8 @@ class Vouchers {
   enableVoucherControls() {
     document.getElementById("unifi-vouchers-revoke").disabled = false;
     document.getElementById("unifi-vouchers-print").disabled = false;
-    document.getElementById("unifi-vouchers-export").disabled = false;
+    document.getElementById("unifi-vouchers-export-csv").disabled = false;
+    document.getElementById("unifi-vouchers-export-pdf").disabled = false;
   }
 
   /**
@@ -331,16 +333,6 @@ class Vouchers {
   }
 
   /**
-   * Prints the voucher
-   *
-   * @param {object[]} vouchers
-   *   the array of voucher object.
-   */
-  print(vouchers) {
-    window.electron.print(vouchers);
-  }
-
-  /**
    * Creates a new voucher
    */
   async createVoucher() {
@@ -372,7 +364,7 @@ class Vouchers {
       channel.close();
     }
 
-    this.print(data);
+    window.electron.print(data);
 
     await this.searchVouchers();
   }
@@ -534,13 +526,47 @@ class Vouchers {
       });
     }
 
-    this.print(data);
+    window.electron.print(data);
+  }
+
+  /**
+   * Export all visible vouchers as pdf.
+   */
+  async exportAsPdf() {
+    const vouchers = [...document.querySelectorAll("#unifi-vouchers-items > li")];
+
+    if (!vouchers.length)
+      return;
+
+    const folder = await window.electron.browseForFolder();
+    if (!folder)
+      return;
+
+    const progress = await (new ProgressDialog()).show();
+
+    let count = 0;
+
+    for (const voucher of vouchers) {
+      const data = {
+        id : voucher.querySelector(".unifi-voucher-id").textContent.trim(),
+        code : voucher.querySelector(".unifi-voucher-code").textContent,
+        duration : voucher.querySelector(".unifi-voucher-duration-date").textContent,
+        note : voucher.querySelector(".unifi-voucher-name").textContent
+      };
+
+      count++;
+      progress.update((100 / vouchers.length) * count, `Exporting ${data.code} - ${data.note}`);
+
+      await window.electron.exportAsPdf(folder, data);
+    }
+
+    await progress.hide();
   }
 
   /**
    * Exports all vouchers currently visible in the search.
    */
-  async exportVouchers() {
+  async exportAsCsv() {
     const vouchers = [...document.querySelectorAll("#unifi-vouchers-items > li")];
 
     const data = [];
@@ -563,7 +589,7 @@ class Vouchers {
     for (const idx in data)
       data[idx] = data[idx].join(";");
 
-    window.electron.save(data.join("\r\n"));
+    window.electron.exportAsCsv(data.join("\r\n"));
   }
 
   /**
@@ -580,7 +606,8 @@ class Vouchers {
     document.getElementById("unifi-voucher-create").addEventListener("click", () => { this.createVoucher(); });
     document.getElementById("unifi-vouchers-revoke").addEventListener("click", () => { this.revokeVouchers(); });
     document.getElementById("unifi-vouchers-print").addEventListener("click", () => { this.printVouchers(); });
-    document.getElementById("unifi-vouchers-export").addEventListener("click", () => { this.exportVouchers(); });
+    document.getElementById("unifi-vouchers-export-csv").addEventListener("click", () => { this.exportAsCsv(); });
+    document.getElementById("unifi-vouchers-export-pdf").addEventListener("click", () => { this.exportAsPdf(); });
 
     document.getElementById("unifi-vouchers-pattern").addEventListener("input", () => { this.onSearchPatternChange(); });
     document.getElementById("unifi-vouchers-only-active").addEventListener("change", () => { this.searchVouchers(); });
@@ -593,6 +620,7 @@ class Vouchers {
     return this;
   }
 }
+
 
 /**
  * A login dialog implementation
@@ -622,6 +650,19 @@ class LoginDialog {
    */
   async show() {
     this.showCredentials();
+
+    document.getElementById("unifi-login-credentials-user").addEventListener("keypress", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        document.getElementById("unifi-login-credentials-password").focus();
+      }
+    });
+    document.getElementById("unifi-login-credentials-password").addEventListener("keypress", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        document.getElementById("unifi-login-credentials-next").click();
+      }
+    });
 
     bootstrap.Modal.getOrCreateInstance("#unifi-login-dialog", { keyboard: false }).show();
     await this.waitForEvent("#unifi-login-dialog", "shown.bs.modal");
@@ -722,28 +763,32 @@ class LoginDialog {
 }
 
 (async () => {
-  const login = new LoginDialog();
-  await login.show();
+  try {
+    const login = new LoginDialog();
+    await login.show();
 
-  const credentials = await login.getCredentials();
+    const credentials = await login.getCredentials();
 
-  const unifi = new Unifi();
-  await unifi.login(
-    credentials.user,
-    credentials.password);
+    const unifi = new Unifi();
+    await unifi.login(
+      credentials.user,
+      credentials.password);
 
-  const devices = await unifi.getDevices();
+    const devices = await unifi.getDevices();
 
-  let device;
-  if (devices.length > 1)
-    device = await login.getDevice(devices);
-  else
-    device = devices[0];
+    let device;
+    if (devices.length > 1)
+      device = await login.getDevice(devices);
+    else
+      device = devices[0];
 
-  await device.connect();
-  await ((new Vouchers(device)).init());
+    await device.connect();
+    await ((new Vouchers(device)).init());
 
-  await login.hide();
+    await login.hide();
+  } catch (ex) {
+    console.error(ex);
+  }
 })();
 
 

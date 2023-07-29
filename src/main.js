@@ -7,17 +7,17 @@ const fs = require('fs').promises;
 const COPIES = 1;
 const PAGES_PER_SHEET = 1;
 
-const print = async(data) => {
+const print = async (data) => {
 
   const win = new BrowserWindow({ show: false });
 
   win.loadFile(`${__dirname}/print.html`, {
-    query: {"vouchers": JSON.stringify(data)}
+    query: { "vouchers": JSON.stringify(data) }
   });
 
   const printOptions = {
     // silent: true,
-    silent:false,
+    silent: false,
     printBackground: true,
     color: true,
     margin: {
@@ -41,9 +41,9 @@ const print = async(data) => {
   });
 };
 
-const save = async (data) => {
+const exportAsCsv = async (data) => {
   const filename = dialog.showSaveDialogSync(BrowserWindow.getFocusedWindow(), {
-    title: 'Export Vouchers…',
+    title: 'Export Vouchers as CSV…',
     filters: [
       { name: 'CSV Files', extensions: ['csv'] },
       { name: 'All Files', extensions: ['*'] }
@@ -54,6 +54,56 @@ const save = async (data) => {
     return;
 
   await fs.writeFile(filename, data);
+};
+
+const browseForFolder = async() => {
+  const folder = dialog.showOpenDialogSync(BrowserWindow.getFocusedWindow(), {
+    title: "Export Vouchers as PDF…",
+    properties: ['openDirectory']
+  });
+
+  if (!folder)
+    return null;
+
+  return folder[0];
+};
+
+const exportAsPdf = async (folder, voucher) => {
+
+  const options = {
+    printBackground: true,
+    color: true,
+    margin: {
+      marginType: 'printableArea'
+    },
+    landscape: false,
+    pagesPerSheet: PAGES_PER_SHEET,
+    pageSize: "A4",
+    collate: false,
+    copies: COPIES,
+    header: '',
+    footer: ''
+  };
+
+  const win = new BrowserWindow({ show: false });
+  try {
+
+    const data = await new Promise((resolve) => {
+      win.loadFile(`${__dirname}/print.html`, {
+        query: { "vouchers": JSON.stringify([voucher]) }
+      });
+
+      win.webContents.on('did-finish-load', async () => {
+        resolve(await win.webContents.printToPDF(options));
+      });
+    });
+
+    await fs.writeFile(
+      path.join(folder, `${voucher.id}.pdf`), data);
+
+  } finally {
+    win.destroy();
+  }
 };
 
 
@@ -70,8 +120,10 @@ const createWindow = () => {
   // mainWindow.removeMenu();
   mainWindow.webContents.openDevTools();
 
-  ipcMain.handle('print', async (event, args) => { return await print(args); } );
-  ipcMain.handle('save', async (event, args) => { return await save(args); } );
+  ipcMain.handle('print', async (event, vouchers) => { return await print(vouchers); });
+  ipcMain.handle('exportAsCsv', async (event, vouchers) => { return await exportAsCsv(vouchers); });
+  ipcMain.handle('exportAsPdf', async (event, folder, voucher) => { return await exportAsPdf(folder, voucher); });
+  ipcMain.handle('browseForFolder', async () => { return await browseForFolder(); });
 
   // and load the index.html of the app.
   mainWindow.loadFile('./src/index.html');
