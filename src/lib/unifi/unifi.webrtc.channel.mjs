@@ -356,7 +356,7 @@ class UnifiWebRtcChannel {
    *   the compressed data.
    */
   async decompress(data) {
-    const stream = new Response(data).body
+    const stream = new Response(new Uint8Array(data)).body
       .pipeThrough(new DecompressionStream('deflate'));
     return new Response(stream).arrayBuffer();
   }
