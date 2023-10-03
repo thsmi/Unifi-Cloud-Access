@@ -1,75 +1,17 @@
+
 import { Unifi } from "./lib/unifi/unifi.cloud.mjs";
+import { CSVFile } from "./csv.mjs";
+import { ProgressDialog } from "./ui/dialogs/progress.mjs";
+import { LoginDialog } from "./ui/dialogs/login.mjs";
 
 const SECONDS_PER_MINUTE = 60;
 const HOURS_PER_DAY = 24;
 const MILLISECONDS_PER_SECONDS = 1000;
+const DAYS_PER_YEAR = 365;
 
 const INPUT_COOL_DOWN = 500;
 
-/* global bootstrap */
-
-/**
- * Creates a simplistic progress dialog.
- * It has a static backdrop, can't be canceled and consumes any events.
- */
-class ProgressDialog {
-
-  /**
-   * Creates a new Progress Dialog instance.
-   */
-  constructor() {
-    this.id = "#unifi-progress";
-  }
-
-  /**
-   * Shows the progress dialog.
-   *
-   * @returns {ProgressDialog}
-   *   a self reference.
-   */
-  async show() {
-    document.querySelector(`${this.id}-status`).style.width = `0%`;
-    document.querySelector(`${this.id}-text`).textContent = "";
-
-    return new Promise((resolve) => {
-      const elm = document.querySelector(this.id);
-      elm.addEventListener(
-        "shown.bs.modal", () => { resolve(this); }, {once : true});
-      bootstrap.Modal.getOrCreateInstance(elm).show();
-    });
-  }
-
-  /**
-   * Hides the progress dialog.
-   *
-   * @returns {ProgressDialog}
-   *   a self reference.
-   */
-  async hide() {
-    return new Promise((resolve) => {
-      const elm = document.querySelector(this.id);
-      elm.addEventListener(
-        "hidden.bs.modal", () => { resolve(this); }, {once : true});
-      bootstrap.Modal.getOrCreateInstance(elm).hide();
-    });
-  }
-
-  /**
-   * Updates the progress status.
-   *
-   * @param {int} progress
-   *   the progress status in percent.
-   * @param {string} text
-   *   the progress message to be displayed.
-   * @returns {ProgressDialog}
-   *   a self reference.
-   */
-  update(progress, text) {
-    document.querySelector(`${this.id}-status`).style.width = `${progress}%`;
-    document.querySelector(`${this.id}-text`).textContent = text;
-    return this;
-  }
-}
+const DECIMAL = 10;
 
 /**
  * Controller for Voucher UI.
@@ -99,9 +41,15 @@ class Vouchers {
     duration = Math.floor(duration / SECONDS_PER_MINUTE);
     const hours = duration % HOURS_PER_DAY;
     duration = Math.floor(duration / HOURS_PER_DAY);
-    const days = duration;
+    const days = duration % DAYS_PER_YEAR;
+    duration = Math.floor(duration / DAYS_PER_YEAR);
+    const years = duration;
 
     let result = "";
+
+    if (years > 0)
+      result += " " + years + " y";
+
     if (days > 0)
       result += " " + days + "d";
 
@@ -115,12 +63,14 @@ class Vouchers {
   }
 
   /**
-   * Updates the batch revoke preview
+   * Retrieves a list of all known vouchers from the unifi controller.
+   *
+   * @param {string} [prefix]
+   *   if specified it will return only vouchers with a name starting with this prefix.
+   * @returns {object}
+   *   an array containing the vouchers
    */
-  async searchVouchers() {
-
-    const exp = new RegExp(document.getElementById("unifi-vouchers-pattern").value, "i");
-
+  async getVouchers(prefix) {
     const channel = await this.unifi.openApiChannel();
     let vouchers = [];
 
@@ -129,6 +79,21 @@ class Vouchers {
     } finally {
       channel.close();
     }
+
+    if (!prefix)
+      return vouchers;
+
+    return vouchers.filter((item) => { return item.note.startsWith(prefix); });
+  }
+
+  /**
+   * Updates the batch revoke preview
+   */
+  async searchVouchers() {
+
+    const exp = new RegExp(document.getElementById("unifi-vouchers-pattern").value, "i");
+
+    const vouchers = await this.getVouchers();
 
     document.getElementById("unifi-vouchers-results").classList.add("d-none");
 
@@ -290,7 +255,7 @@ class Vouchers {
 
       for (const elm of elms) {
         count++;
-        progress.update((100 / elms.length) * count, elm.querySelector(".unifi-voucher-name").textContent);
+        progress.update(elms.length, count, elm.querySelector(".unifi-voucher-name").textContent);
 
         await channel.revokeVoucher(elm.querySelector(".unifi-voucher-id").textContent);
       }
@@ -340,11 +305,11 @@ class Vouchers {
     const name = document.getElementById("unifi-create-voucher-name").value;
 
     const expiration = 1
-      * parseInt(document.getElementById("unifi-create-voucher-expires").value, 10)
-      * parseInt(document.getElementById("unifi-create-voucher-expires-unit").value, 10);
+      * parseInt(document.getElementById("unifi-create-voucher-expires").value, DECIMAL)
+      * parseInt(document.getElementById("unifi-create-voucher-expires-unit").value, DECIMAL);
 
-    const devices = parseInt(document.getElementById("unifi-create-voucher-devices").value, 10);
-    const quantity = parseInt(document.getElementById("unifi-create-voucher-quantity").value, 10);
+    const devices = parseInt(document.getElementById("unifi-create-voucher-devices").value, DECIMAL);
+    const quantity = parseInt(document.getElementById("unifi-create-voucher-quantity").value, DECIMAL);
 
     const data = [];
 
@@ -369,31 +334,65 @@ class Vouchers {
     await this.searchVouchers();
   }
 
-  async filter(data) {
-    let vouchers;
-
-    const channel = await this.unifi.openApiChannel();
-    try {
-      vouchers = await await channel.getVouchers();
-    } finally {
-      channel.close();
-    }
+  /**
+   * Calculates which vouchers are new.
+   * It compares the given list of items with the ones existing on the
+   * unifi and returns all items new to the unifi.
+   *
+   * @param {object[]} data
+   *   the list which items to be checked if they are new or not.
+   * @returns {object[]}
+   *   the list of voucher which are new.
+   */
+  async calculateNewVouchers(data) {
+    const vouchers = await this.getVouchers();
 
     const cache = new Map();
-
-    for (const voucher of vouchers.data)
+    for (const voucher of vouchers)
       cache.set(voucher.note, voucher.code);
 
-    return data.filter((item) => { return !cache.has(item); });
+    return data.filter((item) => { return !cache.has(item.note); });
+  }
+
+  /**
+   * Calculates which vouchers have been deleted.
+   *
+   * It download the current set of vouchers and then compares
+   * them against the given list of items.
+   *
+   * If an item exists on the unifi but not in the given list
+   * of items, then it will be considered as deleted.
+   *
+   * @param {string} prefix
+   *   the prefix to which the analysis should be limited.
+   * @param {object[]} items
+   *   the items which are imported.
+   * @returns {object[]}
+   *   a list of vouchers which should be revoked
+   */
+  async calculateDeletedVouchers(prefix, items) {
+    const vouchers = await this.getVouchers(prefix);
+
+    const cache = new Map();
+    for (const voucher of vouchers)
+      cache.set(voucher.note, {
+        "id": voucher._id,
+        "name": voucher.note
+      });
+
+    for (const item of items)
+      cache.delete(item.note);
+
+    return cache.values();
   }
 
   /**
    * Called whenever the preview should be updated
    */
   async onBatchCreatePreview() {
-    document.getElementById("unifi-import-preview-plane").classList.add("d-none");
 
     document.getElementById("unifi-create-vouchers-info").classList.add("d-none");
+    document.getElementById("unifi-import-preview-plane").classList.add("d-none");
 
     const file = document.getElementById("unifi-import-file").files[0];
 
@@ -402,48 +401,79 @@ class Vouchers {
       parent.firstChild.remove();
 
     if ((typeof (file) === "undefined") || (file === null)) {
-      console.log("No file to import specified.");
       return;
     }
 
-    let data = (await (file.text())).split("\r\n");
-    const headers = data.shift().split(";");
+    const prefix = document.getElementById("unifi-import-vouchers-prefix").value;
+    const pattern = document.getElementById("unifi-import-vouchers-pattern").value;
 
-    data = data.map((item) => {
-      return item.split(";");
-    });
+    const data = (new CSVFile())
+      .load(await file.arrayBuffer())
+      .toVouchers(`${prefix} - ${pattern}`);
 
-    // Remove empty lines...
-    data = data.filter((item) => {
-      return (item.length >= headers.length);
-    });
+    for (const item of await this.calculateNewVouchers(data)) {
+      const elm = document.getElementById("unifi-import-item-template").content.cloneNode(true);
 
-    const pattern = document.getElementById("unifi-import-pattern").value;
+      elm.querySelector(".unifi-import-item-text").textContent = item.note;
+      elm.querySelector(".unifi-import-item-add").classList.remove("d-none");
+      elm.querySelector(".unifi-import-item-add-btn").classList.remove("d-none");
 
+      elm.querySelector(".unifi-import-item-add-btn").addEventListener("click", async () => {
 
+        const expiration = 1
+          * parseInt(document.getElementById("unifi-import-expires").value, DECIMAL)
+          * parseInt(document.getElementById("unifi-import-expires-unit").value, DECIMAL);
 
-    data = data.map((item) => {
+        const devices = parseInt(document.getElementById("unifi-import-devices").value, DECIMAL);
 
-      let result = pattern;
+        const channel = await this.unifi.openApiChannel();
+        await channel.createVoucher(item.note, expiration, devices);
 
-      headers.forEach((header, idx) => {
-        result = result.replace("${" + header.toLowerCase() + "}", item[idx]);
+        this.onBatchCreatePreview();
       });
 
-      return result;
-    });
-
-    data = await this.filter(data);
-
-    for (const item of data) {
-      const elm = document.createElement("li");
-      elm.textContent = item;
-      elm.classList.add("list-group-item");
+      if (item.partial)
+        elm.querySelector(".unifi-import-item-active").checked = false;
 
       document.getElementById("unifi-imports").appendChild(elm);
     }
 
-    if (!data.length) {
+
+    const strategy = document.getElementById("unifi-import-vouchers-strategy").value;
+
+    if (strategy === "mirror") {
+      for (const item of await this.calculateDeletedVouchers(prefix, data)) {
+        const elm = document.getElementById("unifi-import-item-template").content.cloneNode(true);
+
+        elm.querySelector(".unifi-voucher-id").textContent = item.id;
+        elm.querySelector(".unifi-import-item-text").textContent = item.name;
+        elm.querySelector(".unifi-import-item-remove").classList.remove("d-none");
+        elm.querySelector(".unifi-import-item-remove-btn").classList.remove("d-none");
+
+        elm.querySelector(".unifi-import-item-remove-btn").addEventListener("click", async () => {
+          const channel = await this.unifi.openApiChannel();
+          await channel.revokeVoucher(item.id);
+
+          this.onBatchCreatePreview();
+        });
+
+        document.getElementById("unifi-imports").appendChild(elm);
+      }
+    }
+
+    // Sort the elements...
+    let elms = [ ...document.querySelectorAll("#unifi-imports > li")];
+
+    elms = elms.sort((a, b) => {
+      return a.querySelector(".unifi-import-item-text").textContent.trim().localeCompare(
+        b.querySelector(".unifi-import-item-text").textContent.trim());
+    });
+
+    elms.forEach((elm) => {
+      document.getElementById("unifi-imports").appendChild(elm);
+    });
+
+    if (!elms.length) {
       document.getElementById("unifi-import-create").disabled = true;
       document.getElementById("unifi-create-vouchers-info").classList.remove("d-none");
       return;
@@ -453,9 +483,16 @@ class Vouchers {
     document.getElementById("unifi-import-preview-plane").classList.remove("d-none");
   }
 
+  /**
+   * Creates all the active items shown in the import preview.
+   */
   async onBatchCreate() {
 
-    const elms = [...document.querySelectorAll("#unifi-imports > li")];
+    let elms = [...document.querySelectorAll("#unifi-imports > li")];
+
+    elms = elms.filter((elm) => {
+      return elm.querySelector(".unifi-import-item-active").checked === true;
+    });
 
     if (elms.length === 0)
       return;
@@ -465,29 +502,32 @@ class Vouchers {
     let count = 0;
 
     const expiration = 1
-      * parseInt(document.getElementById("unifi-import-expires").value, 10)
-      * parseInt(document.getElementById("unifi-import-expires-unit").value, 10);
+      * parseInt(document.getElementById("unifi-import-expires").value, DECIMAL)
+      * parseInt(document.getElementById("unifi-import-expires-unit").value, DECIMAL);
 
-    const devices = parseInt(document.getElementById("unifi-import-devices").value, 10);
+    const devices = parseInt(document.getElementById("unifi-import-devices").value, DECIMAL);
 
     const channel = await this.unifi.openApiChannel();
     try {
       for (const elm of elms) {
         count++;
-        progress.update((100 / elms.length) * count, elm.textContent);
+        const name = elm.querySelector(".unifi-import-item-text").textContent;
 
-        await channel.createVoucher(elm.textContent, expiration, devices);
+        if (elm.querySelector(".unifi-import-item-add").classList.contains("d-none") === false) {
+          progress.update(elms.length, count, `Adding ${name}`);
+          await channel.createVoucher(name, expiration, devices);
+        }
+
+        if (elm.querySelector(".unifi-import-item-remove").classList.contains("d-none") === false) {
+          progress.update(elms.length, count, `Revoking ${name}`);
+          await channel.revokeVoucher(elm.querySelector(".unifi-voucher-id").textContent);
+        }
+
+        elm.remove();
       }
     } finally {
       channel.close();
     }
-
-    document.getElementById("unifi-import-preview-plane").classList.add("d-none");
-    document.getElementById("unifi-import-create").disabled = true;
-
-    const parent = document.getElementById("unifi-imports");
-    while (parent.firstChild)
-      parent.firstChild.remove();
 
     document.getElementById("unifi-create-vouchers-info").classList.add("d-none");
 
@@ -496,6 +536,10 @@ class Vouchers {
     await progress.hide();
   }
 
+  /**
+   * Called whenever a search dialog is updated.
+   * It will trigger a delayed update as soon as search changes cool down.
+   */
   onSearchPatternChange() {
     if (this.searchPatternTimer)
       clearTimeout(this.searchPatternTimer);
@@ -503,6 +547,10 @@ class Vouchers {
     this.searchPatternTimer = setTimeout(async () => { await this.searchVouchers(); }, INPUT_COOL_DOWN);
   }
 
+  /**
+   * Called whenever the import dialog is changes.
+   * It will trigger a delayed update as soon as changes to the import dialog cooled down.
+   */
   onImportChange() {
     if (this.importPatterTimer)
       clearTimeout(this.importPatterTimer);
@@ -555,7 +603,7 @@ class Vouchers {
       };
 
       count++;
-      progress.update((100 / vouchers.length) * count, `Exporting ${data.code} - ${data.note}`);
+      progress.update(vouchers.length, count, `Exporting ${data.code} - ${data.note}`);
 
       await window.electron.exportAsPdf(folder, data);
     }
@@ -593,15 +641,57 @@ class Vouchers {
   }
 
   /**
+   * Activates all items in the batch import.
+   */
+  batchSelectAll() {
+    const elms = [ ...document.querySelectorAll("#unifi-imports .unifi-import-item-active")];
+
+    for (const elm of elms) {
+      elm.checked = true;
+    }
+  }
+
+  /**
+   * Deactivates all items in the batch import.
+   **/
+  batchSelectNone() {
+    const elms = [ ...document.querySelectorAll("#unifi-imports .unifi-import-item-active")];
+
+    for (const elm of elms) {
+      elm.checked = false;
+    }
+  }
+
+  /**
    * Entry point which initializes the UI.
    * @returns {Vouchers}
    *   a self reference
    */
   async init() {
+
+    document.querySelector('a[data-bs-target="#unifi-vouchers-pane"]').addEventListener("show.bs.tab", () => {
+      this.searchVouchers();
+    });
+
+    document.querySelector('a[data-bs-target="#unifi-create-vouchers-pane"]').addEventListener("show.bs.tab", () => {
+      this.onBatchCreatePreview();
+    });
+
     document.getElementById("unifi-import-file").addEventListener("change", () => { this.onBatchCreatePreview(); });
+    document
+      .getElementById("unifi-import-vouchers-prefix")
+      .addEventListener("input", () => { this.onImportChange(); });
+    document
+      .getElementById("unifi-import-vouchers-pattern")
+      .addEventListener("input", () => { this.onImportChange(); });
+    document
+      .getElementById("unifi-import-vouchers-strategy")
+      .addEventListener("change", () => { this.onImportChange(); });
 
     document.getElementById("unifi-import-create").addEventListener("click", () => { this.onBatchCreate(); });
-    document.getElementById("unifi-import-pattern").addEventListener("input", () => { this.onImportChange(); });
+    document.getElementById("unifi-import-select-all").addEventListener("click", () => { this.batchSelectAll(); });
+    document.getElementById("unifi-import-select-none").addEventListener("click", () => { this.batchSelectNone(); });
+
 
     document.getElementById("unifi-voucher-create").addEventListener("click", () => { this.createVoucher(); });
     document.getElementById("unifi-vouchers-revoke").addEventListener("click", () => { this.revokeVouchers(); });
@@ -621,146 +711,6 @@ class Vouchers {
   }
 }
 
-
-/**
- * A login dialog implementation
- */
-class LoginDialog {
-
-  /**
-   * Waits for the given event to occur.
-   *
-   * @param {string} selector
-   *   the selector which identifies the element.
-   * @param {string} eventName
-   *   the event name to which should be listened.
-   */
-  async waitForEvent(selector, eventName) {
-    const elm = document.querySelector(selector);
-
-    await new Promise((resolve) => {
-      elm.addEventListener(
-        eventName,
-        () => { resolve(); }, {once: true});
-    });
-  }
-
-  /**
-   * Shows the dialog and waits until the animation completed.
-   */
-  async show() {
-    this.showCredentials();
-
-    document.getElementById("unifi-login-credentials-user").addEventListener("keypress", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        document.getElementById("unifi-login-credentials-password").focus();
-      }
-    });
-    document.getElementById("unifi-login-credentials-password").addEventListener("keypress", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        document.getElementById("unifi-login-credentials-next").click();
-      }
-    });
-
-    bootstrap.Modal.getOrCreateInstance("#unifi-login-dialog", { keyboard: false }).show();
-    await this.waitForEvent("#unifi-login-dialog", "shown.bs.modal");
-  }
-
-  /**
-   * Shows the progress page
-   */
-  showProgress() {
-    document.getElementById("unifi-login-device").classList.add("d-none");
-    document.getElementById("unifi-login-credentials").classList.add("d-none");
-    document.getElementById("unifi-loading").classList.remove("d-none");
-  }
-
-  /**
-   * Shows the credentials page
-   */
-  showCredentials() {
-    document.getElementById("unifi-login-device").classList.add("d-none");
-    document.getElementById("unifi-loading").classList.add("d-none");
-    document.getElementById("unifi-login-credentials").classList.remove("d-none");
-  }
-
-  /**
-   * Shows the device page
-   */
-  showDevice() {
-    document.getElementById("unifi-login-credentials").classList.add("d-none");
-    document.getElementById("unifi-loading").classList.add("d-none");
-    document.getElementById("unifi-login-device").classList.remove("d-none");
-  }
-
-  /**
-   * Prompts the user for credentials
-   *
-   * @returns {object}
-   *   object containing the username and password.
-   */
-  async getCredentials() {
-
-    this.showCredentials();
-
-    await this.waitForEvent("#unifi-login-credentials-next", "click");
-
-    this.showProgress();
-
-    return {
-      user : document.getElementById("unifi-login-credentials-user").value,
-      password : document.getElementById("unifi-login-credentials-password").value };
-  }
-
-  /**
-   * Prompts the user for the device he wants to connect to
-   *
-   * @param {UnifiDevice[]} devices
-   *   the list of possible devices.
-   * @returns {UnifiDevice}
-   *   the selected device
-   */
-  async getDevice(devices) {
-
-    for (const device in devices) {
-      const elm = document.getElementById("unifi-login-device-template").content.cloneNode(true);
-
-      // Make the id a bit more readable
-      let id = devices[device].getDeviceId().split(":");
-      id[0] = id[0].match(/.{1,10}/g).join("-");
-      id = id.join(":");
-
-      elm.querySelector(".form-check-label").textContent = id;
-      elm.querySelector(".form-check-label").htmlFor = "unifi-login-device-" + device;
-
-      elm.querySelector(".form-check-input").id = "unifi-login-device-" + device;
-      elm.querySelector(".form-check-input").value = device;
-
-      document.getElementById("unifi-login-devices").appendChild(elm);
-    }
-
-    document.querySelectorAll('#unifi-login-devices input[name="unifi-login-device"]')[0].checked = true;
-
-    this.showDevice();
-
-    await this.waitForEvent("#unifi-login-device-next", "click");
-
-    this.showProgress();
-
-    const idx = document.querySelector('#unifi-login-devices input[name="unifi-login-device"]:checked').value;
-    return devices[idx];
-  }
-
-  /**
-   * Hides the dialog and waits until it faded out.
-   */
-  async hide() {
-    bootstrap.Modal.getOrCreateInstance("#unifi-login-dialog", { keyboard: false }).hide();
-    await this.waitForEvent("#unifi-login-dialog", "hidden.bs.modal");
-  }
-}
 
 (async () => {
   try {
@@ -790,5 +740,3 @@ class LoginDialog {
     console.error(ex);
   }
 })();
-
-
