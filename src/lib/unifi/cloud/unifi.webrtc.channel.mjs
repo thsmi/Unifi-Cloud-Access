@@ -1,14 +1,3 @@
-
-/* global CompressionStream */
-/* global DecompressionStream */
-
-const UNLIMITED_DEVICES = 0;
-const ONE_DAY = 1440;
-
-const DEFAULT_QUOTA = UNLIMITED_DEVICES;
-const DEFAULT_EXPIRATION = ONE_DAY;
-const DEFAULT_COUNT = 1;
-
 const HTTP_SUCCESS = 200;
 
 const HEADER_LENGTH = 8;
@@ -27,6 +16,10 @@ const TYPE_HEADER = 1;
 const TYPE_BODY = 2;
 
 
+/**
+ * Implements an abstract request send via the webrtc side band.
+ * @abstract
+ */
 class UnifiRequest {
 
   /**
@@ -113,12 +106,18 @@ class UnifiRequest {
   }
 
   /**
+   * Constructs a message.
    *
-   * @param {*} type
-   * @param {*} format
-   * @param {*} compress
-   * @param {*} payload
-   * @returns
+   * @param {int} type
+   *   the message type.
+   * @param {int} format
+   *   the payload's format, can be either FORMAT_JSON, FORMAT_STRING or FORMAT_BINARY
+   * @param {int} compress
+   *   indicates if the payload is compressed or not.
+   * @param {string|object|Uint8Array} payload
+   *   a json object in case the format is JSON,
+   * @returns {byte[]}
+   *   an array containing the message to send.
    */
   async getMessage(type, format, compress, payload) {
 
@@ -191,6 +190,9 @@ class UnifiRequest {
   }
 }
 
+/**
+ * Emulates an HTTP Post send via the WebRTC side band.
+ */
 class UnifiPostRequest extends UnifiRequest {
 
   /**
@@ -214,6 +216,9 @@ class UnifiPostRequest extends UnifiRequest {
   }
 }
 
+/**
+ * Emulates an HTTP Get send via the WebRTC side band.
+ */
 class UnifiGetRequest extends UnifiRequest {
 
   /**
@@ -237,8 +242,10 @@ class UnifiGetRequest extends UnifiRequest {
   }
 }
 
-
-
+/**
+ * Implements a WebRTC channel which can be used to send http like
+ * Get and post requests.
+ */
 class UnifiWebRtcChannel {
 
   /**
@@ -253,6 +260,11 @@ class UnifiWebRtcChannel {
     this.buffer = [];
   }
 
+  /**
+   * Called whenever new data is received
+   * @param {*} data
+   *    the new data.
+   */
   onData(data) {
     this.buffer = [...this.buffer, ...data];
 
@@ -314,12 +326,16 @@ class UnifiWebRtcChannel {
     return (this.buffer.length >= length);
   }
 
+  /**
+   *
+   * @param {int} length
+   */
   async waitForBuffer(length) {
 
     if (this.hasBytes(length))
       return;
 
-    return new Promise((resolve) => {
+    await new Promise((resolve) => {
 
       const callback = () => {
         if (!this.hasBytes(length))
@@ -344,8 +360,6 @@ class UnifiWebRtcChannel {
     await this.waitForBuffer(length);
     return this.buffer.splice(0, length);
   }
-
-
 
   /**
    * Decompressed the data by using the deflate algorithm.
@@ -439,7 +453,8 @@ class UnifiWebRtcChannel {
    *
    * @param {UnifiRequest} request
    *   the unifi api request to be send to the server.
-   * @returns 
+   * @returns {object}
+   *   the json payload returned by the object.
    *
    */
   async send(request) {
@@ -447,98 +462,6 @@ class UnifiWebRtcChannel {
     return await this.extractResponse(request.getId());
   }
 
-  /**
-   * Request a list with all known vouchers.
-   *
-   * @returns {object}
-   *   the response containing all known vouchers.
-   */
-  async getVouchers() {
-    return await this.send(new UnifiGetRequest("/proxy/network/api/s/default/stat/voucher"));
-  }
-
-  /**
-   * Request voucher create at the given timestamp.
-   *
-   * @param {int} time
-   *   an Epoch Timestamp but in seconds instead of milliseconds.
-   * @returns {object}
-   *   a response containing all voucher with the given timestamp.
-   */
-  async getVoucher(time) {
-    const message = JSON.stringify({
-      "create_time": time
-    });
-
-    return await this.send(
-      new UnifiPostRequest(
-        "/proxy/network/api/s/default/stat/voucher",
-        (new TextEncoder()).encode(message)));
-  }
-
-  /**
-   * Deletes/Revokes the voucher with the give id.
-   *
-   * @param {string} id
-   *   the id which should be revoked.
-   * @returns {object}
-   *   the revocation response.
-   */
-  async revokeVoucher(id) {
-    const message = JSON.stringify({
-      "_id": id,
-      "cmd": "delete-voucher"
-    });
-
-    return await this.send(
-      new UnifiPostRequest(
-        "/proxy/network/api/s/default/cmd/hotspot",
-        (new TextEncoder()).encode(message)));
-  }
-
-  /**
-   * Creates a new voucher.
-   *
-   * @param {string} note
-   *   the note or description for the voucher.
-   * @param {int} [expire]
-   *   the expiration in seconds. Default to one day if omitted.
-   * @param {int} [quota]
-   *   the number of devices. Default to 0 (unlimited) if omitted.
-   * @param {int} [count]
-   *   the number of voucher to create. Default to one voucher if omitted.
-   * @returns {object}
-   *   the newly created voucher.
-   */
-  async createVoucher(note, expire, quota, count) {
-
-    if ((typeof (quota) === "undefined") || (quota === null))
-      quota = DEFAULT_QUOTA;
-
-    if ((typeof (count) === "undefined") || (count === null))
-      count = DEFAULT_COUNT;
-
-    if ((typeof (expire) === "undefined") || (expire === null))
-      expire = DEFAULT_EXPIRATION;
-
-    const message = JSON.stringify({
-      "cmd": "create-voucher",
-      "n": count,
-      "quota": quota,
-      "expire": expire,
-      "note": note
-    });
-
-    let data = await this.send(
-      new UnifiPostRequest(
-        "/proxy/network/api/s/default/cmd/hotspot",
-        (new TextEncoder()).encode(message)));
-
-    data = await this.getVoucher(data.data[0].create_time);
-
-    return data.data;
-  }
-
 }
 
-export { UnifiWebRtcChannel };
+export { UnifiWebRtcChannel, UnifiGetRequest, UnifiPostRequest };

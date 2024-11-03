@@ -11,6 +11,121 @@
 
 <body>
 
+  <!-- Export Wizard -->
+  <div class="modal fade" id="unifi-export-dialog" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h1 class="modal-title fs-5">Export</h1>
+          <button type="button" id="unifi-export-close" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>  
+
+        <div id="unifi-export-format-dialog">
+          <div class="modal-body">
+            <div class="alert alert-warning d-none" id="unifi-export-format-mail-warning">No Server for outgoing mail specified in settings, mail export disabled.</div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="unifi-export-format" id="unifi-export-format-csv" value="csv" checked>
+              <label class="form-check-label" for="unifi-export-format-csv">
+                Export as CSV
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="unifi-export-format" id="unifi-export-format-pdf" value="pdf">
+              <label class="form-check-label" for="unifi-export-format-pdf">
+                Export as PDF
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="unifi-export-format" id="unifi-export-format-mail" value="mail">
+              <label class="form-check-label" for="unifi-export-format-mail">
+                Send as Mail
+              </label>
+            </div>            
+          </div>          
+          <div class="modal-footer">         
+            <button type="button" class="btn btn-primary" id="unifi-export-format-next">
+              Next
+            </button>          
+          </div>
+        </div>
+
+        <div id="unifi-export-mail-compose-dialog" class="d-none">
+          <div class="modal-body">
+            <div class="mb-3 row">
+              <label for="unifi-export-mail-compose-subject" class="col-sm-2 col-form-label">Subject</label>
+              <div class="col-sm-10">
+                <input type="text" class="form-control" id="unifi-export-mail-compose-subject" placeholder="Subject">
+              </div>
+            </div>
+            <div class="mb-3">
+              <textarea class="form-control" id="unifi-export-mail-compose-body" rows="10"></textarea>
+            </div>   
+          </div>
+          <div class="modal-footer">         
+            <button type="button" class="btn btn-primary" id="unifi-export-mail-compose-next">
+              Next
+            </button>
+          </div>
+        </div>
+
+        <div id="unifi-export-mail-credentials-dialog" class="d-none">
+          <div class="modal-body">
+
+            <div class="alert alert-warning d-none" id="unifi-export-mail-credentials-error">Error while connecting to smtp server.</div>
+
+            <div class="mb-3 row">
+              <label for="unifi-export-mail-credentials-user" class="col-sm-3 col-form-label">Username</label>
+              <div class="col-sm-9">
+                <input type="text" class="form-control" id="unifi-export-mail-credentials-user">
+              </div>
+            </div>
+            <div class="mb-3 row">
+              <label for="unifi-export-mail-credentials-password" class="col-sm-3 col-form-label">Password</label>
+              <div class="col-sm-9">
+                <input type="password" class="form-control" id="unifi-export-mail-credentials-password">
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <div class="align-self-center me-auto">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="unifi-export-mail-credentials-remember" checked>
+                <label class="form-check-label" for="unifi-login-remember">Remember credentials</label>
+              </div>      
+            </div>                 
+            <button type="button" class="btn btn-primary" id="unifi-export-mail-credentials-next">
+              Next
+            </button>
+          </div>          
+        </div>
+
+        <div id="unifi-export-mail-error-dialog" class="d-none"> 
+          <div class="modal-body">
+            <h5>Sending a mail for the following vouchers failed:</h5>
+            <div>
+              <ul id="unifi-export-mail-error-items" class="list-group list-group-flush"></ul>
+            </div>
+          </div>          
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" id="unifi-export-mail-error-dialog-close">
+              Close
+            </button>
+          </div>
+        </div>        
+
+        <div id="unifi-export-progress-dialog" class="d-none">
+          <div class="modal-body text-center">
+            <div class="progress" role="progressbar"  aria-valuenow="75" aria-valuemin="0" aria-valuemax="100">
+              <div id="unifi-export-progress-status" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+            </div>
+            <div id="unifi-export-progress-text"></div>            
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- progress dialog -->
   <div class="modal modal-lg fade" id="unifi-progress" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
@@ -34,27 +149,92 @@
         <div class="modal-header">
           <h1 class="modal-title fs-5">Login</h1>
         </div>
+
+        <div id="unifi-loading" class="d-none">
+          <div class="modal-body text-center">
+            <div class="spinner-border" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <div>
+              Loading
+            </div>            
+          </div>
+        </div>
+
+        <div id="unifi-login-mfa" class="d-none">
+          <div class="modal-body">
+            <div class="mb-3 row" >
+              <div id="unifi-login-mfa-description" class="form-text"></div>
+            </div>
+            <div class="mb-3 row">
+              <label for="unifi-login-mfa-token" class="col-sm-3 col-form-label">Code</label>
+              <div class="col-sm-9">
+                <input type="text" class="form-control" id="unifi-login-mfa-token">
+              </div>
+            </div>            
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" id="unifi-login-mfa-next">
+              Continue
+            </button>
+          </div>
+        </div>        
+
         <div id="unifi-login-credentials">
           <div class="modal-body">
             <div class="mb-3 row">
-              <label for="unifi-login-credentials-user" class="col-sm-2 col-form-label">Username</label>
-              <div class="col-sm-10">
-                <input type="text" class="form-control" id="unifi-login-credentials-user">
+              <label for="unifi-login-connection" class="col-sm-3 col-form-label">Connection</label>
+              <div class="col-sm-5">
+                <select class="form-select form-control" id="unifi-login-connection">
+                  <option value="cloud"selected>Cloud Access</option>
+                  <option value="direct">Direct</option>
+                </select>
+              </div>
+            </div>
+            <div class="mb-3 row d-none">
+              <label for="unifi-login-direct-host" class="col-sm-3 col-form-label">Hostname</label>
+              <div class="col-sm-9">
+                <input type="text" class="form-control" id="unifi-login-direct-host" placeholder="127.0.0.1:8443">
+              </div>
+            </div>
+            <div class="mb-3 row d-none">
+              <label for="unifi-login-direct-user" class="col-sm-3 col-form-label">Username</label>
+              <div class="col-sm-9">
+                <input type="text" class="form-control" id="unifi-login-direct-user">
+              </div>
+            </div>
+            <div class="mb-3 row d-none">
+              <label for="unifi-login-direct-password" class="col-sm-3 col-form-label">Password</label>
+              <div class="col-sm-9">
+                <input type="password" class="form-control" id="unifi-login-direct-password">
               </div>
             </div>
             <div class="mb-3 row">
-              <label for="unifi-login-credentials-password" class="col-sm-2 col-form-label">Password</label>
-              <div class="col-sm-10">
-                <input type="password" class="form-control" id="unifi-login-credentials-password">
+              <label for="unifi-login-cloud-user" class="col-sm-3 col-form-label">Username</label>
+              <div class="col-sm-9">
+                <input type="text" class="form-control" id="unifi-login-cloud-user">
               </div>
             </div>
-          </div>
+            <div class="mb-3 row">
+              <label for="unifi-login-cloud-password" class="col-sm-3 col-form-label">Password</label>
+              <div class="col-sm-9">
+                <input type="password" class="form-control" id="unifi-login-cloud-password">
+              </div>
+            </div>
+          </div>          
           <div class="modal-footer">
+            <div class="align-self-center me-auto">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="unifi-login-remember" checked>
+                <label class="form-check-label" for="unifi-login-remember">Remember credentials</label>
+              </div>      
+            </div>            
             <button type="button" class="btn btn-primary" id="unifi-login-credentials-next">
               Login
             </button>
           </div>
         </div>
+
         <div id="unifi-login-device" class="d-none">
           <div class="modal-body">
             <div>Please select the device</div>
@@ -72,18 +252,8 @@
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-primary" id="unifi-login-device-next">
-              next
+              Continue
             </button>
-          </div>
-        </div>        
-        <div id="unifi-loading" class="d-none">
-          <div class="modal-body text-center">
-            <div class="spinner-border" role="status">
-              <span class="visually-hidden">Loading...</span>
-            </div>
-            <div>
-              Loading
-            </div>            
           </div>
         </div>
       </div>
@@ -134,6 +304,9 @@
           <li class="nav-item">
             <a class="nav-link" data-bs-toggle="tab" role="tab" data-bs-target="#unifi-create-vouchers-pane">Batch Update</a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" role="tab" data-bs-target="#unifi-vouchers-settings">Settings</a>
+          </li>          
         </ul>
         <div class="align-self-center">
           <!-- <button id="unifi-refresh" type="button" class="btn btn-sm btn-outline-secondary me-1">Refresh</button> -->
@@ -203,7 +376,7 @@
             <div class="input-group mb-3">
               <label for="unifi-import-vouchers-prefix" class="col-sm-2 col-form-label">Pattern</label>
               <input type="text" id="unifi-import-vouchers-prefix" style="width: 20%; flex: 0 0 auto;  border-top-left-radius: 6px; border-bottom-left-radius: 6px;"
-                     class="form-control"  value="Campingplatz 2023" placeholder="Prefix">
+                     class="form-control"  value="Campingplatz" placeholder="Prefix">
               <span class="input-group-text">&nbsp;-&nbsp;</span>
               <input type="text" id="unifi-import-vouchers-pattern"
                      class="form-control" 
@@ -220,6 +393,16 @@
               </select>
             </div>
           </div>
+
+          <!--<div class="mb-3 row">
+            <label for="unifi-import-vouchers-dedup" class="col-sm-2 col-form-label">Dedup</label>
+            <div class="col-sm-8">
+              <select id="unifi-import-vouchers-dedup" class="form-select">
+                <option value="none" selected>Full pattern (Prefix and Sub-Pattern match)</option>
+                <option value="pattern">Ignore prefix (Sub-Pattern match)</option>
+              </select>
+            </div>
+          </div>-->
 
           <div class="mb-3 row">
             <label for="unifi-import-expires" class="col-sm-2 col-form-label">Expiration</label>
@@ -292,8 +475,7 @@
                 <div class="input-group mb-3">
                   <input id="unifi-vouchers-pattern" type="text" class="form-control" placeholder="Search pattern (Regular expression)" value=".*">
                   <button class="btn btn-outline-secondary" type="button" id="unifi-vouchers-search">Search</button>
-                </div>                
-                <!--<input id ="unifi-vouchers-pattern" class="form-control" type="text" placeholder="Default input" aria-label="default input example" value="Campingplatz 2023 .*">-->
+                </div>
               </div>
             </div>
             <div class="row">
@@ -319,8 +501,7 @@
 
             <div class="text-end">              
               <button id="unifi-vouchers-print" class="btn btn-primary" disabled>Print</button>              
-              <button id="unifi-vouchers-export-csv" class="btn btn-primary" disabled>Export as CSV</button>
-              <button id="unifi-vouchers-export-pdf" class="btn btn-primary" disabled>Export as PDF</button>
+              <button id="unifi-vouchers-export" class="btn btn-primary" disabled>Export</button>
               <button id="unifi-vouchers-revoke" class="btn btn-primary" disabled>Revoke</button>
             </div>
           </div>        
@@ -331,6 +512,91 @@
               </li>                
             </ul>
           </div>  
+        </div>
+
+        <!-- Voucher settings-->
+        <div id="unifi-vouchers-settings" class="tab-pane fade m-4" role="tabpanel">          
+          <ul class="list-group list-group-flush">
+
+            <li class="list-group-item px-0 mb-4 d-none" id="unifi-voucher-settings-cloud">
+              <h3>Unifi Cloud Connection</h3>
+              <div class="form-text mb-2">
+                You can resets here any saved cloud connection credentials.<br/>
+                After resetting you will be prompted for a username and password upon the next login.<br/>
+                And have the option in the login dialog to save the password.
+              </div>
+              <div class="mb-4 row">
+                <label for="unifi-voucher-settings-cloud-user" class="col-sm-2 col-form-label">Username:</label>
+                <div class="col-sm-10">
+                  <input type="text" readonly class="form-control-plaintext" id="unifi-voucher-settings-cloud-user" value="">
+                </div>
+              </div>
+              <div class="text-end mb-2">
+                <button type="button" class="btn btn-primary" id="unifi-voucher-settings-cloud-forget">
+                  Forget Cloud Connection
+                </button>
+              </div>
+            </li>
+
+            <li class="list-group-item px-0 mb-4 d-none" id="unifi-voucher-settings-direct">
+              <h3>Unifi Direct Connection</h3>
+              <div class="form-text mb-2">
+                You can resets here any saved direct connection credentials.<br/>
+                After resetting you will be prompted for a username and password upon the next login.<br/>
+                And have the option in the login dialog to save the password.
+              </div>
+
+              <div class="row">
+                <label for="unifi-voucher-settings-direct-host" class="col-sm-2 col-form-label">Host:</label>
+                <div class="col-sm-10">
+                  <input type="text" readonly class="form-control-plaintext" id="unifi-voucher-settings-direct-host" value="">
+                </div>
+              </div>
+
+              <div class="mb-4 row">
+                <label for="unifi-voucher-settings-direct-user" class="col-sm-2 col-form-label">Username:</label>
+                <div class="col-sm-10">
+                  <input type="text" readonly class="form-control-plaintext" id="unifi-voucher-settings-direct-user" value="">
+                </div>
+              </div>
+
+              <div class="text-end mb-2">
+                <button type="button" class="btn btn-primary" id="unifi-voucher-settings-direct-forget">
+                  Forget Direct Connection
+                </button>
+              </div>
+            </li>
+
+            <li class="list-group-item px-0">
+              <h3>Mail Server</h3>
+              <div class="mb-2 row">
+                <label for="unifi-vouchers-mail-hostname" class="col-sm-2 col-form-label">Hostname</label>
+                <div class="col-sm-8">
+                  <input type="text" class="form-control" id="unifi-vouchers-mail-hostname" placeholder="example.com">
+                </div>
+              </div>
+              <div class="mb-2 row">
+                <label for="unifi-vouchers-mail-port" class="col-sm-2 col-form-label">Port</label>
+                <div class="col-sm-3">
+                  <input type="text" class="form-control" id="unifi-vouchers-mail-port" placeholder="465">
+                </div>
+              </div>
+              <div class="mb-4 row">
+                <label for="unifi-vouchers-mail-sender" class="col-sm-2 col-form-label">Sender</label>
+                <div class="col-sm-6">
+                  <input type="text" class="form-control" id="unifi-vouchers-mail-sender" placeholder="wifi@example.com">
+                </div>
+              </div>
+              <div class="text-end mb-2">
+                <button type="button" class="btn btn-outline-secondary d-none" id="unifi-voucher-mail-forget">
+                  Forget Credentials
+                </button>          
+                <button type="button" class="btn btn-primary" id="unifi-voucher-mail-save">
+                  Update Server
+                </button>
+              </div>
+            </li>            
+          </ul>      
         </div>
       </div>
     </div>

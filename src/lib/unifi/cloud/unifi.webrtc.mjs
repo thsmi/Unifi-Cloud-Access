@@ -1,4 +1,4 @@
-import { MqttSocket } from "./../mqtt/mqtt.mjs";
+import { MqttSocket } from "../../mqtt/mqtt.mjs";
 
 /**
  * Implements a Unifi compatible WebRTC Connection via a MQTT based signaling.
@@ -185,7 +185,12 @@ class UnifiWebRtcSocket {
         "sdpMid": "0"
       };
 
-      this.connection.addIceCandidate(candidate);
+      try {
+        this.connection.addIceCandidate(candidate);
+      } catch (ex) {
+        console.log(ex);
+      }
+
       return;
     }
 

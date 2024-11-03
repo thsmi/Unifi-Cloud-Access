@@ -29,13 +29,54 @@ class LoginDialog {
   async show() {
     this.showCredentials();
 
-    document.getElementById("unifi-login-credentials-user").addEventListener("keypress", (event) => {
+    document.getElementById("unifi-login-connection").addEventListener("change", (event) => {
+      if (event.target.value === "direct") {
+        document.getElementById("unifi-login-direct-host").parentElement.parentElement.classList.remove("d-none");
+        document.getElementById("unifi-login-direct-user").parentElement.parentElement.classList.remove("d-none");
+        document.getElementById("unifi-login-direct-password").parentElement.parentElement.classList.remove("d-none");
+
+        document.getElementById("unifi-login-cloud-user").parentElement.parentElement.classList.add("d-none");
+        document.getElementById("unifi-login-cloud-password").parentElement.parentElement.classList.add("d-none");
+        return;
+      }
+
+      document.getElementById("unifi-login-cloud-user").parentElement.parentElement.classList.remove("d-none");
+      document.getElementById("unifi-login-cloud-password").parentElement.parentElement.classList.remove("d-none");
+
+      document.getElementById("unifi-login-direct-host").parentElement.parentElement.classList.add("d-none");
+      document.getElementById("unifi-login-direct-user").parentElement.parentElement.classList.add("d-none");
+      document.getElementById("unifi-login-direct-password").parentElement.parentElement.classList.add("d-none");
+    });
+
+    document.getElementById("unifi-login-direct-host").addEventListener("keypress", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        document.getElementById("unifi-login-credentials-password").focus();
+        document.getElementById("unifi-login-direct-user").focus();
       }
     });
-    document.getElementById("unifi-login-credentials-password").addEventListener("keypress", (event) => {
+
+    document.getElementById("unifi-login-direct-user").addEventListener("keypress", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        document.getElementById("unifi-login-direct-password").focus();
+      }
+    });
+
+    document.getElementById("unifi-login-direct-password").addEventListener("keypress", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        document.getElementById("unifi-login-credentials-next").click();
+      }
+    });
+
+    document.getElementById("unifi-login-cloud-user").addEventListener("keypress", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        document.getElementById("unifi-login-direct-password").focus();
+      }
+    });
+
+    document.getElementById("unifi-login-cloud-password").addEventListener("keypress", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
         document.getElementById("unifi-login-credentials-next").click();
@@ -52,34 +93,71 @@ class LoginDialog {
   showProgress() {
     document.getElementById("unifi-login-device").classList.add("d-none");
     document.getElementById("unifi-login-credentials").classList.add("d-none");
+    document.getElementById("unifi-login-mfa").classList.add("d-none");
+
     document.getElementById("unifi-loading").classList.remove("d-none");
   }
 
   /**
-   * Shows the credentials page
+   * Shows the credentials page.
    */
   showCredentials() {
     document.getElementById("unifi-login-device").classList.add("d-none");
     document.getElementById("unifi-loading").classList.add("d-none");
+    document.getElementById("unifi-login-mfa").classList.add("d-none");
+
     document.getElementById("unifi-login-credentials").classList.remove("d-none");
   }
 
   /**
-   * Shows the device page
+   * Shows the device page.
    */
   showDevice() {
     document.getElementById("unifi-login-credentials").classList.add("d-none");
     document.getElementById("unifi-loading").classList.add("d-none");
+    document.getElementById("unifi-login-mfa").classList.add("d-none");
+
     document.getElementById("unifi-login-device").classList.remove("d-none");
   }
 
   /**
-   * Prompts the user for credentials
+   * SHows the multi factor authentication.
+   */
+  showAuthentication() {
+    document.getElementById("unifi-login-credentials").classList.add("d-none");
+    document.getElementById("unifi-loading").classList.add("d-none");
+    document.getElementById("unifi-login-device").classList.add("d-none");
+
+    document.getElementById("unifi-login-mfa").classList.remove("d-none");
+  }
+
+  /**
+   * Prompts the user for credentials.
    *
+   * @param {object} [defaults]
+   *   optional default values to prefill the fields.
    * @returns {object}
    *   object containing the username and password.
    */
-  async getCredentials() {
+  async getCredentials(defaults) {
+
+    if (defaults) {
+      if (defaults.direct) {
+        if (defaults.direct.host)
+          document.getElementById("unifi-login-direct-host").value = defaults.direct.host;
+        if (defaults.direct.hostname)
+          document.getElementById("unifi-login-direct-user").value = defaults.direct.user;
+        if (defaults.direct.password)
+          document.getElementById("unifi-login-direct-password").value = defaults.direct.password;
+      }
+
+      if (defaults.cloud) {
+        if (defaults.cloud.user)
+          document.getElementById("unifi-login-cloud-user").value = defaults.cloud.user;
+        if (defaults.cloud.password)
+          document.getElementById("unifi-login-cloud-password").value = defaults.cloud.password;
+      }
+    }
 
     this.showCredentials();
 
@@ -87,9 +165,42 @@ class LoginDialog {
 
     this.showProgress();
 
+    if (document.getElementById("unifi-login-connection").value === "direct") {
+      return {
+        direct:  true,
+        host : document.getElementById("unifi-login-direct-hostname").value,
+        user : document.getElementById("unifi-login-direct-user").value,
+        password : document.getElementById("unifi-login-direct-password").value };
+    }
+
     return {
-      user : document.getElementById("unifi-login-credentials-user").value,
-      password : document.getElementById("unifi-login-credentials-password").value };
+      direct: false,
+      user : document.getElementById("unifi-login-cloud-user").value,
+      password : document.getElementById("unifi-login-cloud-password").value };
+  }
+
+  /**
+   * Prompts the user for the multi factor authentication.
+   *
+   * @param {AbstractUnifiCloudAuthenticator} authenticator
+   *   the authenticator to be rendered.
+   * @returns {object}
+   *   object containing the authenticator id and the token.
+   */
+  async getAuthentication(authenticator) {
+
+    document.getElementById("unifi-login-mfa-description").textContent = authenticator.getDescription();
+
+    this.showAuthentication();
+
+    await this.waitForEvent("#unifi-login-mfa-next", "click");
+
+    this.showProgress();
+
+    return {
+      authenticator : authenticator.id,
+      token: document.getElementById("unifi-login-mfa-token").value
+    };
   }
 
   /**
@@ -129,6 +240,16 @@ class LoginDialog {
 
     const idx = document.querySelector('#unifi-login-devices input[name="unifi-login-device"]:checked').value;
     return devices[idx];
+  }
+
+  /**
+   * Checks if the user has chosen to remember the password.
+   *
+   * @returns {boolean}
+   *   true in case the password should be remembered.
+   */
+  isRememberLogin() {
+    return document.getElementById("unifi-login-remember").checked;
   }
 
   /**

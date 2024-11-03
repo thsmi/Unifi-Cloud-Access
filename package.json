@@ -5,14 +5,17 @@
   "main": "src/main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "electron ."
+    "start": "electron .", 
+    "package-win32" : "npx electron-packager ./ voucher --platform=win32 --download.cacheRoot=./build/cache --out ./build/win32 --prune --overwrite",
+    "package-linux" : "npx electron-packager ./ voucher --platform=linux --download.cacheRoot=./build/cache --out ./build/linux --prune --overwrite",
+    "package-linux-arm64" : "npx electron-packager ./ voucher --platform=linux --arch=arm64 --download.cacheRoot=./build/cache --out ./build/linuxarm64 --prune --overwrite"
   },
-  "author": "",
+  "author": "Thomas Schmid",
   "license": "AGPL-3.0-or-later",
   "devDependencies": {
-    "electron": "^24.3.0",
-    "electron-packager": "^17.1.1",
-    "eslint": "^8.38.0",
-    "eslint-plugin-jsdoc": "^40.1.1"    
+    "electron": "^29.1.1",
+    "electron-packager": "^17.1.2",
+    "eslint": "^8.56.0",
+    "eslint-plugin-jsdoc": "^48.0.2"
   }
 }
