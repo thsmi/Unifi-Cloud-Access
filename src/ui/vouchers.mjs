@@ -326,9 +326,9 @@ class Vouchers {
 
     const cache = new Map();
     for (const voucher of vouchers)
-      cache.set(voucher.note, voucher.code);
+      cache.set(voucher.note.toLowerCase(), voucher.code);
 
-    return data.filter((item) => { return !cache.has(item.note); });
+    return data.filter((item) => { return !cache.has(item.note.toLowerCase()); });
   }
 
   /**
@@ -352,13 +352,13 @@ class Vouchers {
 
     const cache = new Map();
     for (const voucher of vouchers)
-      cache.set(voucher.note, {
+      cache.set(voucher.note.toLowerCase(), {
         "id": voucher._id,
         "name": voucher.note
       });
 
     for (const item of items)
-      cache.delete(item.note);
+      cache.delete(item.note.toLowerCase());
 
     return cache.values();
   }

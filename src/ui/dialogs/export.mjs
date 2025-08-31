@@ -254,7 +254,7 @@ class ExportDialog {
    */
   getMailAddresses(vouchers) {
 
-    const regex = /^[^(]*\((?<mail>.*@.*?)\).*$/;
+    const regex = /\((?<mail>[^()]*@[^()]*)\)[^()]*$/;
 
     const result = {
       good : [],

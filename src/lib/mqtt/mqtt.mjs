@@ -422,6 +422,10 @@ class MqttInputBuffer extends MqttBuffer {
 
 class MqttOutput {
 
+  /**
+   * Creates a new instance.
+   * @param {*} socket
+   */
   constructor(socket) {
     this.socket = socket;
   }
@@ -636,6 +640,14 @@ class MqttSocket {
       this.listeners.set("#conAck", () => { resolve(); });
       this.output.sendConnect(this.clientId);
     });
+  }
+
+  /**
+   * Disconnects and releases the MQTT Socket.
+   */
+  async disconnect() {
+    this.socket.close();
+    this.socket = null;
   }
 
   /**

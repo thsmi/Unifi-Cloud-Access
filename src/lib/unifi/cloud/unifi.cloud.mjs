@@ -1,6 +1,19 @@
 import { AwsCanonicalHeaderAuthentication } from "../../aws/aws.mjs";
 import { UnifiCloudDevice } from "./unifi.cloud.device.mjs";
 
+// The ubiquiti guys do something strange, they ignore the server
+// returned by the server and instead use a hardcoded list of TURN servers.
+const TURNS_SERVERS = [
+  "stun:stun.cloudflare.com:3478",
+  "turn:turn.cloudflare.com:3478?transport=udp",
+  "turn:turn.cloudflare.com:3478?transport=tcp",
+  "turns:turn.cloudflare.com:5349?transport=tcp",
+  "stun:stun.cloudflare.com:53",
+  "turn:turn.cloudflare.com:53?transport=udp",
+  "turn:turn.cloudflare.com:80?transport=tcp",
+  "turns:turn.cloudflare.com:443?transport=tcp"];
+
+
 /**
  * Connects to the unifi cloud access.
  */
@@ -69,9 +82,17 @@ class UnifiCloudConnection {
 
     // we need to remove for some unknown reason stun from the config and tcp:3478.
     let uris = credentials.turnCredentials.uris;
-    uris = uris.filter((uri) => {
+    /*uris = uris.filter((uri) => {
       return !uri.startsWith("stun:") && !uri.endsWith(":3478?transport=tcp");
-    });
+    });*/
+
+    // Inject the hardcoded TURN Servers.
+    for (const server of TURNS_SERVERS) {
+      if (!uris.includes(server)) {
+        uris.push(server);
+      }
+    }
+
     credentials.turnCredentials.uris = uris;
 
     this.credentials = credentials;
@@ -141,292 +162,4 @@ class UnifiCloudConnection {
 }
 
 
-/**
- * An abstract authenticator implementation
- */
-class AbstractUnifiCloudAuthenticator {
-
-  /**
-   * Creates a new instance.
-   *
-   * @param {string} id
-   *   the authenticator's unique id.
-   * @param {boolean} preferred
-   *   true in case this is the default authentication method.
-   */
-  constructor(id, preferred) {
-    this.id = id;
-    this.preferred = preferred;
-  }
-
-  /**
-   * Check if this is the user's default authenticator.
-   *
-   * @returns {boolean}
-   *   true in case this is the default authenticator otherwise false.
-   */
-  isPreferred() {
-    return this.preferred;
-  }
-
-  /**
-   * Authenticates the current session via the given 2fa token.
-   * @param {string} token
-   *   the secret multi factor token generated returned by the second factor.
-   */
-  async authenticate(token) {
-
-    const result = await fetch(
-      "https://sso.ui.com/api/sso/v1/login/2fa", {
-        method: "POST",
-        cache: "no-cache",
-        headers: {
-          "content-type": "application/json",
-          "Accept": "application/json, text/plain, */*"
-        },
-        body: JSON.stringify({ "token": token })
-      });
-
-    // TODO Check for success
-  }
-
-  /**
-   * Gets a description for the mfa method
-   *
-   * @abstract
-   * @returns {string}
-   *   a human readable description for this authorization method.
-   */
-  getDescription() {
-    throw new Error("Implement me");
-  }
-
-  /**
-   * Returns the authenticators unique id.
-   *
-   * @returns {string}
-   *   the authenticator's unique id.
-   */
-  getId() {
-    return this.id;
-  }
-
-}
-
-/**
- * The mail verification authenticator. Unifi will send an email with the authorization code.
- * It requires user interaction to enter the token.
- */
-class UnifiCloudEmailAuthenticator extends AbstractUnifiCloudAuthenticator{
-
-  /**
-   * Creates a new instance
-   *
-   * @param {object} data
-   *   the authenticator data returned by the unifi sso endpoint.
-   * @param {boolean} isDefault
-   *   true in case this is the default authentication method.
-   */
-  constructor(data, isDefault) {
-    super(data.id, isDefault);
-    this.data = data;
-  }
-
-  /**
-   * @inheritdoc
-   */
-  getDescription() {
-    return `Email authorization via ${this.data.email}`;
-  }
-
-  // resend
-  // https://sso.ui.com/api/sso/v1/user/self/mfa/email/${data.id}/send
-}
-
-
-
-/**
- * The legacy authenticator which does not used mfa or user interaction
- */
-class UnifiLegacyCloudAuthenticators {
-
-  /**
-   * Returns wether the authenticator requires used feedback or not.
-   *
-   * @returns {boolean}
-   *   always false because it does not used mfa or user interaction.
-   *   an exists for backward compatibility.
-   */
-  isMultiFactor() {
-    return false;
-  }
-
-  /**
-   * A list with all devices associated with this account.
-   *
-   * @returns {UnifiCloudDevice[]}
-   *   a list with all unifi cloud devices accessible by the user
-   */
-  async getCloudDevices() {
-    return await (new UnifiCloudConnection().getDevices());
-  }
-}
-
-/**
- * The new multi factor authenticator which relies upon multi factor authentication.
- */
-class UnifiCloudMultiFactorAuthenticators extends UnifiLegacyCloudAuthenticators {
-
-  /**
-   * Creates a new instance.
-   */
-  constructor() {
-    super();
-    this.authenticators = new Map();
-  }
-
-  /**
-   * Returns wether the authenticator requires used feedback or not.
-   *
-   * @returns {boolean}
-   *   always true all methods require user interaction.
-   **/
-  isMultiFactor() {
-    return true;
-  }
-
-  /**
-   * Gets an authenticator based on this unique id.
-   *
-   * @param {string} id
-   *   the authenticator to be retrieved
-   * @returns {AbstractUnifiCloudAuthenticator}
-   *   the authenticator or null
-   **/
-  getAuthenticator(id) {
-    return this.authenticators.get(id);
-  }
-
-  /**
-   * Gets the user's preferred authenticator.
-   *
-   * @returns {AbstractUnifiCloudAuthenticator}
-   *   the user's preferred authenticator.
-   */
-  getPreferredAuthenticator() {
-    for (const authenticator of this.getAuthenticators()) {
-      if (authenticator.isPreferred())
-        return authenticator;
-    }
-
-    throw new Error("No preferred authenticator specified.");
-  }
-
-  /**
-   * Gets a list all compatible authenticators.
-   *
-   * @returns {AbstractUnifiCloudAuthenticator[]}
-   *   a list of compatible unifi cloud authenticators.
-   */
-  getAuthenticators() {
-    return this.authenticators.values();
-  }
-
-  /**
-   * Adds an authenticator to the list of compatible authenticators.
-   *
-   * @param {AbstractUnifiCloudAuthenticator} authenticator
-   *   the authenticator to be added.
-   */
-  addAuthenticator(authenticator) {
-    this.authenticators.set(authenticator.getId(), authenticator);
-  }
-
-  /**
-   * Gets a list of all known cloud devices.
-   *
-   * @param {string} id
-   *   the authenticator's unique id
-   * @param {string} token
-   *   the secret token returned to the user by the multi factor authorization.
-   * @returns {UnifiCloudDevice[]}
-   *   a list with all unifi cloud devices accessible by the user
-   */
-  async getCloudDevices(id, token) {
-    // TODO cache the connection an return it in case we are already authenticated.
-    await (this.getAuthenticator(id).authenticate(token));
-    return await super.getCloudDevices();
-  }
-}
-
-/**
- * Implements a high level authentication abstraction.
- *
- * It logs into the unifi cloud access then check if MFA is required.
- * If not a legacy non mfa authenticator is returned otherwise a mfa authenticator is returned.
- */
-class UnifiCloudAuthentication {
-
-  /**
-   * Requests a list of authenticators from for the
-   * unifi cloud access and collets the session cookies.
-   *
-   * The authenticator can be used to obtain a list with
-   * all known devices.
-   *
-   * @param {string} username
-   *   the username
-   * @param {string} password
-   *   the password
-   * @returns {UnifiCloudAuthenticators[]}
-   *   the list with all connected devices.
-   **/
-  async login(username, password) {
-
-    const result = await fetch(
-      "https://sso.ui.com/api/sso/v1/login", {
-        method: "POST",
-        cache: "no-cache",
-        headers: {
-          "content-type": "application/json",
-          "Accept": "application/json, text/plain, */*"
-        },
-        body: JSON.stringify({ "user": username, "password": password })
-      });
-
-    // TODO do we also get other results? We should catch errors here too...
-    // like wrong passwords...
-
-    if (result.status !== 499)
-      return new UnifiLegacyCloudAuthenticators();
-
-    const data = await result.json();
-
-    if (data.required !== '2fa')
-      return new UnifiLegacyCloudAuthenticators();
-
-    const authenticators = new UnifiCloudMultiFactorAuthenticators();
-
-    for (const authenticator of data.authenticators) {
-      const isDefault = (data.user.default_mfa === authenticator.id);
-
-      if (authenticator.type === "email") {
-        authenticators.addAuthenticator(
-          new UnifiCloudEmailAuthenticator(authenticator, isDefault));
-
-        continue;
-      }
-
-      // if (authenticator.type === "XXXX") {
-      //   items.put(new UnifiCloudTokenAuthenticator(authenticator));
-      //   continue;
-      // }
-
-      console.log(`Unknown authenticator type ${authenticator.type}`);
-    }
-
-    return authenticators;
-  }
-}
-
-export { UnifiCloudAuthentication };
+export { UnifiCloudConnection };

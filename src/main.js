@@ -117,6 +117,15 @@ const clearCookies = async() => {
   session.defaultSession.clearStorageData({ storages : ["cookies"]});
 };
 
+const hasCookie = async(name) => {
+  const cookies = await session.defaultSession.cookies.get({"name":name});
+
+  if (cookies.length)
+    return true;
+
+  return false;
+};
+
 const setCookieCorsOverride = async (domains) => {
   cookieCorsOverride = domains;
 };
@@ -194,12 +203,31 @@ const createWindow = () => {
   // mainWindow.removeMenu();
   mainWindow.webContents.openDevTools();
 
+  /*const newWindow = new BrowserWindow({
+  });
+  newWindow.webContents.openDevTools();
+
+  newWindow.loadURL('https://unifi.ui.com/consoles/74ACB913DBB700000000049439040000000004C7D2D5000000005E86EF66:464118488/network/default/insights/hotspot/vouchers');*/
+
+  /*const webrtcWindow = new BrowserWindow({
+  });
+  webrtcWindow.loadURL('chrome://webrtc-internals');*/
+
+ /*const debugWindow = new BrowserWindow({
+    show: true,
+    //webSecurity: false,
+    //url: 'chrome://webrtc-internals'
+    url: "https://www.gogole.com"
+  })*/
+
   ipcMain.handle('print', async (event, vouchers) => { return await print(vouchers); });
   ipcMain.handle('exportAsCsv', async (event, vouchers) => { return await exportAsCsv(vouchers); });
   ipcMain.handle('exportAsPdf', async (event, voucher, folder) => { return await exportAsPdf(voucher, folder); });
   ipcMain.handle('browseForFolder', async () => { return await browseForFolder(); });
+
   ipcMain.handle("setCookieCorsOverride", async (event, domains) => { return await setCookieCorsOverride(domains); });
   ipcMain.handle("clearCookies", async () => { return await clearCookies(); });
+  ipcMain.handle("hasCookie", async(name) => { return await hasCookie(name);});
 
   // Encryption related callbacks
   ipcMain.handle("hasEncryption", async () => {

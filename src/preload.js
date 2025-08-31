@@ -4,12 +4,16 @@ contextBridge.exposeInMainWorld('electron', {
   node: () => { return process.versions.node; },
   chrome: () => { return process.versions.chrome; },
   electron: () => { return process.versions.electron; },
+
   print: (data) => { return ipcRenderer.invoke('print', data); },
   exportAsCsv: (data) => { return ipcRenderer.invoke("exportAsCsv", data); },
   exportAsPdf: (voucher, folder) => { return ipcRenderer.invoke("exportAsPdf", voucher, folder); },
   browseForFolder: () => { return ipcRenderer.invoke("browseForFolder"); },
+
+  hasCookie: (name) => { return ipcRenderer.invoke("hasCookie", name); },
   clearCookies: () => { return ipcRenderer.invoke("clearCookies"); },
   setCookieCorsOverride: (domains) => { return ipcRenderer.invoke("setCookieCorsOverride", domains); },
+
   hasEncryption: () => { return ipcRenderer.invoke("hasEncryption"); },
   encryptString: (decrypted) => {
     return ipcRenderer.invoke("encryptString", decrypted);

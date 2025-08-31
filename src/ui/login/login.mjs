@@ -1,5 +1,7 @@
 /* global bootstrap */
 
+import { Template } from "../template/template.mjs";
+
 /**
  * A login dialog implementation
  */
@@ -27,7 +29,19 @@ class LoginDialog {
    * Shows the dialog and waits until the animation completed.
    */
   async show() {
-    this.showCredentials();
+
+    if (document.getElementById("unifi-login-dialog")) {
+      if (bootstrap.Modal.getInstance("#unifi-login-dialog"))
+        return;
+
+      bootstrap.Modal.getOrCreateInstance("#unifi-login-dialog", { keyboard: false }).show();
+      await this.waitForEvent("#unifi-login-dialog", "shown.bs.modal");
+    }
+
+    const template = await ((new Template()).load("ui/login/login.html"));
+    document.body.appendChild(template);
+
+    this.showProgress();
 
     document.getElementById("unifi-login-connection").addEventListener("change", (event) => {
       if (event.target.value === "direct") {
@@ -189,7 +203,9 @@ class LoginDialog {
    */
   async getAuthentication(authenticator) {
 
-    document.getElementById("unifi-login-mfa-description").textContent = authenticator.getDescription();
+    const factor = authenticator.getPreferredFactor();
+
+    document.getElementById("unifi-login-mfa-description").textContent = factor.getDescription();
 
     this.showAuthentication();
 
@@ -197,10 +213,12 @@ class LoginDialog {
 
     this.showProgress();
 
-    return {
-      authenticator : authenticator.id,
+    const result = {
+      factor : factor.getId(),
       token: document.getElementById("unifi-login-mfa-token").value
     };
+
+    return result;
   }
 
   /**

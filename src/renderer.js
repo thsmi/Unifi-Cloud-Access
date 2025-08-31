@@ -1,10 +1,15 @@
 
-import { LoginDialog } from "./ui/dialogs/login.mjs";
 import { Settings } from "./settings.mjs";
 
-import { UnifiCloudAuthentication } from "./lib/unifi/cloud/unifi.cloud.mjs";
+import {
+  UnifiCloudPasswordAuthentication,
+  UnifiCloudCookieAuthentication
+} from "./lib/unifi/cloud/unifi.cloud.login.mjs";
+
+
 import { UnifiDirectConnection } from "./lib/unifi/direct/unifi.direct.mjs";
 import { Vouchers } from "./ui/vouchers.mjs";
+import { LoginDialog } from "./ui/login/login.mjs";
 
 
 /**
@@ -26,21 +31,37 @@ import { Vouchers } from "./ui/vouchers.mjs";
  * @returns {UnifiDevice[]}
  *   a list with all known unifi devices
  */
-async function getCloudDevices(dialog, user, password) {
+async function getCloudDevicesByPassword(dialog, user, password) {
 
   window.electron.setCookieCorsOverride([
     "https://sso.ui.com/api/sso/v1/", "https://config.ubnt.com/"]);
 
-  const authenticators = await (new UnifiCloudAuthentication().login(user, password));
+  const authenticator = await (new UnifiCloudPasswordAuthentication().login(user, password));
 
-  if (!authenticators.isMultiFactor())
-    return await authenticators.getCloudDevices();
+  if (!authenticator.isMultiFactor())
+    return await (await (authenticator.getCloudConnection())).getDevices();
 
-  const {authenticator, token} = await dialog.getAuthentication(
-    authenticators.getPreferredAuthenticator());
+  const { factor, token } = await dialog.getAuthentication(authenticator);
 
-  return await authenticators.getCloudDevices(authenticator, token);
+  return await (await authenticator.getCloudConnection(factor, token)).getDevices();
 }
+
+/**
+ *
+ * Gets a list with all known cloud devices
+ * which can be accessed by the authentication cookie.
+ *
+ * @returns {UnifiDevice[]}
+ *   a list with all known unifi devices
+ */
+async function getCloudDevicesByCookie() {
+  window.electron.setCookieCorsOverride([
+    "https://sso.ui.com/api/sso/v1/", "https://config.ubnt.com/"]);
+
+  const authenticator = await (new UnifiCloudCookieAuthentication()).login();
+  return await ((await authenticator.getCloudConnection()).getDevices());
+}
+
 
 /**
  * Connects directly to a unifi machine.
@@ -61,9 +82,36 @@ async function getDirectDevice(host, user, password) {
   return await (new UnifiDirectConnection().login(host, user, password));
 }
 
-(async () => {
+async function authenticate(login, settings) {
 
-  await window.electron.clearCookies();
+  // We first try an optimistic cookie login if possible
+  // In case if fails with an exception we'll throw an try a password authentication.
+  const hasAuthCookie = await window.electron.hasCookie("UBIC_AUTH");
+  if (hasAuthCookie) {
+    return await getCloudDevicesByCookie();
+  }
+
+  const credentials = await login.getCredentials(
+    await settings.getConnectionCredentials());
+
+  let devices = [];
+
+  if (credentials.direct) {
+    devices = await getDirectDevice(
+      credentials.host, credentials.user, credentials.password);
+  } else {
+    devices = (await getCloudDevicesByPassword(
+      login, credentials.user, credentials.password));
+  }
+
+  if (login.isRememberLogin())
+    await settings.setConnectionCredentials(credentials);
+
+  return devices;
+}
+
+
+(async () => {
 
   const login = new LoginDialog();
   const settings = new Settings();
@@ -71,19 +119,10 @@ async function getDirectDevice(host, user, password) {
   for (;;) {
     try {
 
+      // Check if we are already authenticated
       await login.show();
 
-      let devices = [];
-      const credentials = await login.getCredentials(
-        await settings.getConnectionCredentials());
-
-      if (credentials.direct) {
-        devices = await getDirectDevice(
-          credentials.host, credentials.user, credentials.password);
-      } else {
-        devices = await getCloudDevices(
-          login, credentials.user, credentials.password);
-      }
+      const devices = await authenticate(login, settings);
 
       let device;
       if (devices.length > 1)
@@ -92,9 +131,6 @@ async function getDirectDevice(host, user, password) {
         device = devices[0];
 
       await device.connect();
-
-      if (login.isRememberLogin())
-        await settings.setConnectionCredentials(credentials);
 
       await ((new Vouchers(device)).init());
 

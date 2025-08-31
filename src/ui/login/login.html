@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+</head>
+
+<body>
+  
+  <!-- Login Dialog -->
+  <div class="modal fade" id="unifi-login-dialog" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h1 class="modal-title fs-5">Login</h1>
+        </div>
+
+        <div id="unifi-loading" class="d-none">
+          <div class="modal-body text-center">
+            <div class="spinner-border" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <div>
+              Loading
+            </div>            
+          </div>
+        </div>
+
+        <div id="unifi-login-mfa" class="d-none">
+          <div class="modal-body">
+            <div class="mb-3 row" >
+              <div id="unifi-login-mfa-description" class="form-text"></div>
+            </div>
+            <div class="mb-3 row">
+              <label for="unifi-login-mfa-token" class="col-sm-3 col-form-label">Code</label>
+              <div class="col-sm-9">
+                <input type="text" class="form-control" id="unifi-login-mfa-token">
+              </div>
+            </div>            
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" id="unifi-login-mfa-next">
+              Continue
+            </button>
+          </div>
+        </div>        
+
+        <div id="unifi-login-credentials">
+          <div class="modal-body">
+            <div class="mb-3 row">
+              <label for="unifi-login-connection" class="col-sm-3 col-form-label">Connection</label>
+              <div class="col-sm-5">
+                <select class="form-select form-control" id="unifi-login-connection">
+                  <option value="cloud"selected>Cloud Access</option>
+                  <option value="direct">Direct</option>
+                </select>
+              </div>
+            </div>
+            <div class="mb-3 row d-none">
+              <label for="unifi-login-direct-host" class="col-sm-3 col-form-label">Hostname</label>
+              <div class="col-sm-9">
+                <input type="text" class="form-control" id="unifi-login-direct-host" placeholder="127.0.0.1:8443">
+              </div>
+            </div>
+            <div class="mb-3 row d-none">
+              <label for="unifi-login-direct-user" class="col-sm-3 col-form-label">Username</label>
+              <div class="col-sm-9">
+                <input type="text" class="form-control" id="unifi-login-direct-user">
+              </div>
+            </div>
+            <div class="mb-3 row d-none">
+              <label for="unifi-login-direct-password" class="col-sm-3 col-form-label">Password</label>
+              <div class="col-sm-9">
+                <input type="password" class="form-control" id="unifi-login-direct-password">
+              </div>
+            </div>
+            <div class="mb-3 row">
+              <label for="unifi-login-cloud-user" class="col-sm-3 col-form-label">Username</label>
+              <div class="col-sm-9">
+                <input type="text" class="form-control" id="unifi-login-cloud-user">
+              </div>
+            </div>
+            <div class="mb-3 row">
+              <label for="unifi-login-cloud-password" class="col-sm-3 col-form-label">Password</label>
+              <div class="col-sm-9">
+                <input type="password" class="form-control" id="unifi-login-cloud-password">
+              </div>
+            </div>
+          </div>          
+          <div class="modal-footer">
+            <div class="align-self-center me-auto">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="unifi-login-remember" checked>
+                <label class="form-check-label" for="unifi-login-remember">Remember credentials</label>
+              </div>      
+            </div>            
+            <button type="button" class="btn btn-primary" id="unifi-login-credentials-next">
+              Login
+            </button>
+          </div>
+        </div>
+
+        <div id="unifi-login-device" class="d-none">
+          <div class="modal-body">
+            <div>Please select the device</div>
+            <template id="unifi-login-device-template">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="unifi-login-device" id="flexRadioDefault1">
+                <label class="form-check-label" for="flexRadioDefault1">
+                  Default radio
+                </label>
+              </div>  
+            </template>
+            
+            <div id="unifi-login-devices">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" id="unifi-login-device-next">
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>
